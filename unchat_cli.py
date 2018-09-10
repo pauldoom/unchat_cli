@@ -28,8 +28,7 @@ def consume(ch, method, params, message):
     if type(message) is bytes:
         message = message.decode('utf-8')
 
-    print("[{0}] << {1}: {2}".format(timestamp(), from_name,
-                                       message))
+    print("\n[{0}] <{1}> {2}".format(timestamp(), from_name, message))
 
 
 def start_consuming(cch, queue):
@@ -49,18 +48,32 @@ def produce(ch, exchange, routing_key, myname, message):
         body=message)
 
 
+def get_routing_key(target, source) -> str:
+    print("\nChatting with '" + target + "' as '" + source + "'")    
+    return target + '.' + source
+
+
 def main():
-    amqp_uri = os.getenv('AMQP_URI', 'amqp://guest:guest@localhost:5672/')
+    amqp_uri = os.getenv('AMQP_URI', 'amqp://guest:guest@localhost:5672')
 
-    myname = getpass.getuser()
+#    myname = getpass.getuser()
 
+    toname = input("Chat with:")
+    myname = input("Connect as:")
+
+#    qname = myname.lower().replace(' ', '_')
+#    my_route = qname + '.' + '#'
+
+    my_name = myname.lower().replace(' ', '_')
+    my_route = my_name + '.' + '#'
+    routing_key = get_routing_key(toname, my_name)
+    
+    # Setup connection and channel
     cn = pika.BlockingConnection(pika.URLParameters(amqp_uri))
     ch = cn.channel()
-    qname = myname.lower().replace(' ', '_')
-    my_route = qname + '.' + '#'
+    res = ch.queue_declare(queue="unchat_" + my_name, durable=True, auto_delete=False)
 
-    res = ch.queue_declare(queue=qname, durable=False, auto_delete=True)
-
+    # Declare queue and setup bindings
     ch.exchange_declare(exchange=EXCHANGE, exchange_type='topic',
                         durable=True, passive=False)
 
@@ -75,13 +88,24 @@ def main():
     start_consuming(cch, res.method.queue)
 
     # Go.
+    print("Input '[to]:[message]' to switch target.")
     while True:
         try:
+            i = input("> ").split(":", 1)
+            if len(i) > 1:
+                toname = i[0]
+                routing_key = get_routing_key(toname, my_name)
+                message = i[1]
+            else:
+                message = i[0]
 
-            i = input("[to] [message]: ")
-            (toname, message) = i.split(' ', 1)
-            routing_key = toname + '.' + qname
+            if message == "":
+                continue
+
+#            routing_key = toname + '.' + qname
             produce(ch, EXCHANGE, routing_key, myname, message)
+            if toname != "all":
+                print("[{0}] <{1}> {2}".format(timestamp(), my_name.capitalize(), message))
 
         except ValueError:
             print("Invalid input")
