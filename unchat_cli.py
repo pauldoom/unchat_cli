@@ -21,14 +21,16 @@ def consume(ch, method, params, message):
 
     # Get routing key components with some flexibility
     if len(rkparts) > 1:
+        to_route = rkparts[0]
         from_route = rkparts[1]
 
+    to_name = ' '.join([p.capitalize() for p in to_route.split('_')])
     from_name = ' '.join([p.capitalize() for p in from_route.split('_')])
 
     if type(message) is bytes:
         message = message.decode('utf-8')
 
-    print("\n[{0}] <{1}> {2}".format(timestamp(), from_name, message))
+    print("\n{0} [{1} <- {2}] {3}".format(timestamp(), to_name, from_name, message))
 
 
 def start_consuming(cch, queue):
@@ -82,7 +84,7 @@ def main():
     ch.queue_bind(exchange=EXCHANGE, queue=res.method.queue,
                   routing_key='all.*')
 
-    # Make a second connection for the thread to use
+    # Make a second connection for the consuming thread to use
     ccn = pika.BlockingConnection(pika.URLParameters(amqp_uri))
     cch = ccn.channel()
     start_consuming(cch, res.method.queue)
@@ -105,15 +107,17 @@ def main():
 #            routing_key = toname + '.' + qname
             produce(ch, EXCHANGE, routing_key, myname, message)
             if toname != "all":
-                print("[{0}] <{1}> {2}".format(timestamp(), my_name.capitalize(), message))
+                print("{0} [{1} -> {2}] {3}".format(timestamp(), my_name.capitalize(), toname.capitalize(), message))
 
         except ValueError:
             print("Invalid input")
 
         except (KeyboardInterrupt, EOFError):
             print("\nAHHHH! YOU KILLED ME!")
-            cch.stop_consuming()
-            sys.exit(0)
+            break
+
+    cch.stop_consuming()
+    sys.exit(0)
 
 if __name__ == '__main__':
     main()
