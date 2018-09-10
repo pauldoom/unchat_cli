@@ -1,9 +1,0 @@
-version: '3.3'
-
-services:
-  
-  client:
-    container_name: unchat_python_client
-    build:
-      context: .
-    image: unchat-python-client 
