@@ -1,0 +1,34 @@
+# Standard OS and editor noise
+.DS_Store
+*~
+.\#*
+\#*
+.project
+.pydevproject
+.idea
+*.iml
+.vscode/
+.settings
+*.sw[pon]
+*.sublime-project
+*.sublime-workspace
+*.wp[ru]
+*.old
+*.tmp
+
+# Standard Python run and build noise
+**/*.py[co]
+**/build
+**/AUTHORS.TXT
+**/__pycache__
+pkg/arch/*.tar.xz
+doc/_build
+dist
+MANIFEST
+*.egg-info
+tags
+
+# Virtual Environments
+.venv
+venv
+
