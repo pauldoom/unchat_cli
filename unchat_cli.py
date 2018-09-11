@@ -14,6 +14,14 @@ def timestamp():
     return datetime.datetime.now().isoformat().split('.', 1)[0]
 
 
+def to_snake_case(text: str) -> str:
+    return text.lower().replace(' ', '_')
+
+
+def to_title_case(text: str) -> str:
+    return ' '.join([p.capitalize() for p in text.split('_')])
+
+
 def consume(ch, method, params, message):
     from_route = 'unknown'
 
@@ -24,13 +32,13 @@ def consume(ch, method, params, message):
         to_route = rkparts[0]
         from_route = rkparts[1]
 
-    to_name = ' '.join([p.capitalize() for p in to_route.split('_')])
-    from_name = ' '.join([p.capitalize() for p in from_route.split('_')])
-
     if type(message) is bytes:
         message = message.decode('utf-8')
 
-    print("\n{0} [{1} <- {2}] {3}".format(timestamp(), to_name, from_name, message))
+    print("\n{0} [{1} <- {2}] {3}".format(timestamp(), 
+                                          to_title_case(to_route),
+                                          to_title_case(from_route),
+                                          message))
 
 
 def start_consuming(cch, queue):
@@ -40,7 +48,7 @@ def start_consuming(cch, queue):
     th.join(0)
 
 
-def produce(ch, exchange, routing_key, myname, message):
+def produce(ch, exchange, routing_key, message):
     if type(message) is str:
         message = message.encode()
 
@@ -51,29 +59,23 @@ def produce(ch, exchange, routing_key, myname, message):
 
 
 def get_routing_key(target, source) -> str:
-    print("\nChatting with '" + target + "' as '" + source + "'")    
+    print("\nChatting with '" + to_title_case(target) + "' as '" + to_title_case(source) + "'")    
     return target + '.' + source
 
 
 def main():
-    amqp_uri = os.getenv('AMQP_URI', 'amqp://guest:guest@localhost:5672')
+    amqp_uri = os.getenv('AMQP_URI', 'amqp://guest:guest@localhost:5672/')
 
-#    myname = getpass.getuser()
+    to_name = to_snake_case(input("Chat with:"))
+    my_name = to_snake_case(input("Connect as:"))
 
-    toname = input("Chat with:")
-    myname = input("Connect as:")
-
-#    qname = myname.lower().replace(' ', '_')
-#    my_route = qname + '.' + '#'
-
-    my_name = myname.lower().replace(' ', '_')
     my_route = my_name + '.' + '#'
-    routing_key = get_routing_key(toname, my_name)
+    routing_key = get_routing_key(to_name, my_name)
     
     # Setup connection and channel
     cn = pika.BlockingConnection(pika.URLParameters(amqp_uri))
     ch = cn.channel()
-    res = ch.queue_declare(queue="unchat_" + my_name, durable=True, auto_delete=False)
+    res = ch.queue_declare(queue="unchat_" + my_name, durable=False, auto_delete=True)
 
     # Declare queue and setup bindings
     ch.exchange_declare(exchange=EXCHANGE, exchange_type='topic',
@@ -95,8 +97,8 @@ def main():
         try:
             i = input("> ").split(":", 1)
             if len(i) > 1:
-                toname = i[0]
-                routing_key = get_routing_key(toname, my_name)
+                to_name = i[0].lower().replace(' ', '_')
+                routing_key = get_routing_key(to_name, my_name)
                 message = i[1]
             else:
                 message = i[0]
@@ -104,10 +106,12 @@ def main():
             if message == "":
                 continue
 
-#            routing_key = toname + '.' + qname
-            produce(ch, EXCHANGE, routing_key, myname, message)
-            if toname != "all":
-                print("{0} [{1} -> {2}] {3}".format(timestamp(), my_name.capitalize(), toname.capitalize(), message))
+            produce(ch, EXCHANGE, routing_key, message)
+            if to_name != "all":
+                print("{0} [{1} -> {2}] {3}".format(timestamp(), 
+                                                    to_title_case(my_name),
+                                                    to_title_case(to_name), 
+                                                    message))
 
         except ValueError:
             print("Invalid input")
