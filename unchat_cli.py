@@ -22,27 +22,32 @@ def to_title_case(text: str) -> str:
     return ' '.join([p.capitalize() for p in text.split('_')])
 
 
-def consume(ch, method, params, message):
-    from_route = 'unknown'
+def generate_consume(queue_name):
+    def consume(ch, method, params, message):
+        from_route = 'unknown'
 
-    rkparts = method.routing_key.split('.')
+        rkparts = method.routing_key.split('.')
 
-    # Get routing key components with some flexibility
-    if len(rkparts) > 1:
-        to_route = rkparts[0]
+        # Get routing key components with some flexibility
+        if len(rkparts) > 1:
+            to_route = rkparts[0]
         from_route = rkparts[1]
 
-    if type(message) is bytes:
-        message = message.decode('utf-8')
+        if from_route == queue_name:
+            return
 
-    print("\n{0} [{1} <- {2}] {3}".format(timestamp(), 
-                                          to_title_case(to_route),
-                                          to_title_case(from_route),
-                                          message))
+        if type(message) is bytes:
+            message = message.decode('utf-8')
+
+        print("\n{0} [{1} <- {2}] {3}\n> ".format(timestamp(),
+                                                  to_title_case(to_route),
+                                                  to_title_case(from_route),
+                                                  message), end='')
+    return consume
 
 
-def start_consuming(cch, queue):
-    cch.basic_consume(consume, queue=queue, no_ack=True)
+def start_consuming(cch, queue, my_name):
+    cch.basic_consume(generate_consume(my_name), queue=queue, no_ack=True)
     th = threading.Thread(target=cch.start_consuming)
     th.start()
     th.join(0)
@@ -59,7 +64,7 @@ def produce(ch, exchange, routing_key, message):
 
 
 def get_routing_key(target, source) -> str:
-    print("\nChatting with '" + to_title_case(target) + "' as '" + to_title_case(source) + "'")    
+    print("\nChatting with '" + to_title_case(target) + "' as '" + to_title_case(source) + "'")
     return target + '.' + source
 
 
@@ -71,7 +76,7 @@ def main():
 
     my_route = my_name + '.' + '#'
     routing_key = get_routing_key(to_name, my_name)
-    
+
     # Setup connection and channel
     cn = pika.BlockingConnection(pika.URLParameters(amqp_uri))
     ch = cn.channel()
@@ -89,7 +94,7 @@ def main():
     # Make a second connection for the consuming thread to use
     ccn = pika.BlockingConnection(pika.URLParameters(amqp_uri))
     cch = ccn.channel()
-    start_consuming(cch, res.method.queue)
+    start_consuming(cch, res.method.queue, my_name)
 
     # Go.
     print("Input '[to]:[message]' to switch target.")
@@ -106,11 +111,30 @@ def main():
             if message == "":
                 continue
 
-            produce(ch, EXCHANGE, routing_key, message)
+            if cn.is_open is not True:
+                cn = pika.BlockingConnection(pika.URLParameters(amqp_uri))
+                ch = None
+
+            if ch is None or ch.is_open is not True:
+                ch = cn.channel()
+
+            rets = 5
+            while rets > 0:
+                try:
+                    produce(ch, EXCHANGE, routing_key, message)
+                    break
+                except pika.exceptions.ConnectionClosed:
+                    cn = pika.BlockingConnection(pika.URLParameters(amqp_uri))
+                    ch = cn.channel()
+
+            if rets == 0:
+                print("\nCan not sent!  Dying!")
+                raise EOFError()
+
             if to_name != "all":
-                print("{0} [{1} -> {2}] {3}".format(timestamp(), 
+                print("{0} [{1} -> {2}] {3}".format(timestamp(),
                                                     to_title_case(my_name),
-                                                    to_title_case(to_name), 
+                                                    to_title_case(to_name),
                                                     message))
 
         except ValueError:
